@@ -12,6 +12,7 @@ primary_region = "iad"
   NEXTAUTH_URL = "https://openhorn.fly.dev"
   NEXTAUTH_SECRET = "openhorn-secret-key-production-2026"
   AUTH_SECRET = "openhorn-secret-key-production-2026"
+  AUTH_TRUST_HOST = "true"
 
 [http_service]
   internal_port = 3000
