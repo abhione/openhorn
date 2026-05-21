@@ -1,0 +1,329 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Workspace & Users ───────────────────────────────────────
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      String   @default("community")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+  teams     Team[]
+  candidates Candidate[]
+  companies  Company[]
+  contacts   Contact[]
+  jobOrders  JobOrder[]
+  tags       Tag[]
+}
+
+model User {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  email       String
+  password    String?
+  name        String
+  role        String    @default("RECRUITER") // ADMIN, RECRUITER, SALES, MANAGER
+  status      String    @default("active")    // active, inactive, invited
+  teamId      String?
+  team        Team?     @relation(fields: [teamId], references: [id])
+  timezone    String    @default("America/New_York")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  ownedCandidates Candidate[] @relation("CandidateOwner")
+  ownedCompanies  Company[]   @relation("CompanyOwner")
+  ownedContacts   Contact[]   @relation("ContactOwner")
+  ownedJobOrders  JobOrder[]  @relation("JobOrderOwner")
+  ownedPlacements Placement[] @relation("PlacementOwner")
+  submissions     Submission[] @relation("SubmittedBy")
+  activities      Activity[]
+  notes           Note[]
+  tasks           Task[]
+
+  @@unique([workspaceId, email])
+}
+
+model Team {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  managerId   String?
+  createdAt   DateTime  @default(now())
+  members     User[]
+}
+
+// ─── Candidates ──────────────────────────────────────────────
+
+model Candidate {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+  ownerId      String?
+  owner        User?    @relation("CandidateOwner", fields: [ownerId], references: [id])
+  firstName    String
+  lastName     String
+  email        String?
+  phone        String?
+  location     String?
+  currentTitle String?
+  status       String   @default("New") // New, Active, Contacted, Interested, Submitted, Interviewing, Offered, Placed, Nurture, Do Not Contact, Archived
+  skills       String   @default("")    // Comma-separated skills (SQLite doesn't support arrays)
+  linkedinUrl  String?
+  summary      String?
+  source       String?                  // LinkedIn, Referral, Job Board, Website, Cold Call, etc.
+  compensation String?
+  availability String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  documents    CandidateDocument[]
+  submissions  Submission[]
+  placements   Placement[]
+  activities   Activity[] @relation("CandidateActivities")
+  notes        Note[]     @relation("CandidateNotes")
+  tags         TagOnCandidate[]
+
+  @@index([workspaceId, status])
+}
+
+model CandidateDocument {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileKey     String
+  mimeType    String?
+  parsedText  String?
+  type        String    @default("resume") // resume, cover_letter, certification, other
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now())
+}
+
+// ─── Companies & Contacts ────────────────────────────────────
+
+model Company {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+  ownerId      String?
+  owner        User?    @relation("CompanyOwner", fields: [ownerId], references: [id])
+  name         String
+  website      String?
+  industry     String?
+  size         String?                  // 1-50, 51-200, 201-500, 501-1000, 1001-5000, 5000+
+  status       String   @default("Prospect") // Prospect, Active Client, Inactive, Former Client
+  billingTerms String?
+  location     String?
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  contacts     Contact[]
+  jobOrders    JobOrder[]
+  placements   Placement[]
+
+  @@unique([workspaceId, name])
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  ownerId     String?
+  owner       User?    @relation("ContactOwner", fields: [ownerId], references: [id])
+  firstName   String
+  lastName    String
+  title       String?
+  email       String?
+  phone       String?
+  status      String   @default("Active") // Active, Inactive, Left Company
+  linkedinUrl String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  jobOrders   JobOrder[]
+  placements  Placement[]
+  interviews  Interview[]
+}
+
+// ─── Job Orders ──────────────────────────────────────────────
+
+model JobOrder {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  workspace       Workspace @relation(fields: [workspaceId], references: [id])
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  contactId       String?
+  contact         Contact? @relation(fields: [contactId], references: [id])
+  ownerId         String?
+  owner           User?    @relation("JobOrderOwner", fields: [ownerId], references: [id])
+  title           String
+  description     String?
+  employmentType  String?  // Full-Time, Contract, Contract-to-Hire, Part-Time, Per Diem
+  location        String?
+  openings        Int      @default(1)
+  compensationMin Float?
+  compensationMax Float?
+  billRate        Float?
+  feeType         String?  // Percentage, Flat Fee
+  feePercent      Float?
+  priority        String   @default("Medium") // Low, Medium, High, Urgent
+  status          String   @default("Draft")  // Draft, Open, On Hold, Filled, Closed, Cancelled
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  submissions     Submission[]
+  placements      Placement[]
+
+  @@index([workspaceId, status])
+}
+
+// ─── Submissions (Candidate-Job Pipeline) ────────────────────
+
+model Submission {
+  id              String    @id @default(cuid())
+  candidateId     String
+  candidate       Candidate @relation(fields: [candidateId], references: [id])
+  jobOrderId      String
+  jobOrder        JobOrder  @relation(fields: [jobOrderId], references: [id])
+  stage           String    @default("Sourced") // Sourced, Contacted, Interested, Internal Review, Submitted to Client, Client Reviewing, Interview Requested, Interview Scheduled, Interview Completed, Offer, Accepted, Placement Created, Rejected, Not Interested, No Show, Declined
+  clientStage     String?
+  submittedAt     DateTime  @default(now())
+  submittedById   String?
+  submittedBy     User?     @relation("SubmittedBy", fields: [submittedById], references: [id])
+  rejectionReason String?
+  lastActivityAt  DateTime  @default(now())
+
+  interviews      Interview[]
+
+  @@unique([candidateId, jobOrderId])
+}
+
+// ─── Interviews ──────────────────────────────────────────────
+
+model Interview {
+  id             String     @id @default(cuid())
+  submissionId   String
+  submission     Submission @relation(fields: [submissionId], references: [id])
+  scheduledAt    DateTime
+  type           String     @default("Phone Screen") // Phone Screen, Video, In-Person, Panel, Technical
+  locationOrLink String?
+  status         String     @default("Scheduled") // Scheduled, Completed, Cancelled, No Show
+  feedback       String?
+  contactId      String?
+  contact        Contact?   @relation(fields: [contactId], references: [id])
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+// ─── Placements ──────────────────────────────────────────────
+
+model Placement {
+  id               String    @id @default(cuid())
+  candidateId      String
+  candidate        Candidate @relation(fields: [candidateId], references: [id])
+  jobOrderId       String
+  jobOrder         JobOrder  @relation(fields: [jobOrderId], references: [id])
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id])
+  contactId        String?
+  contact          Contact?  @relation(fields: [contactId], references: [id])
+  ownerId          String?
+  owner            User?     @relation("PlacementOwner", fields: [ownerId], references: [id])
+  startDate        DateTime
+  endDate          DateTime?
+  status           String    @default("Pending Start") // Pending Start, Active, Completed, Terminated, Cancelled, Closed
+  salary           Float?
+  billRate         Float?
+  payRate          Float?
+  feeAmount        Float?
+  guaranteeEndDate DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// ─── Activities, Notes, Tasks ────────────────────────────────
+
+model Activity {
+  id          String     @id @default(cuid())
+  workspaceId String?
+  entityType  String     // Candidate, Company, Contact, JobOrder, Placement
+  entityId    String
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id])
+  candidateId String?
+  candidate   Candidate? @relation("CandidateActivities", fields: [candidateId], references: [id])
+  type        String     // Call, Email, Meeting, Note, SMS, LinkedIn, Other
+  direction   String?    // Inbound, Outbound
+  subject     String?
+  body        String?
+  occurredAt  DateTime   @default(now())
+  dueAt       DateTime?
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+}
+
+model Note {
+  id          String     @id @default(cuid())
+  entityType  String     // Candidate, Company, Contact, JobOrder, Placement
+  entityId    String
+  authorId    String?
+  author      User?      @relation(fields: [authorId], references: [id])
+  candidateId String?
+  candidate   Candidate? @relation("CandidateNotes", fields: [candidateId], references: [id])
+  body        String
+  visibility  String     @default("team") // team, private, public
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  assigneeId  String?
+  assignee    User?     @relation(fields: [assigneeId], references: [id])
+  entityType  String?   // Candidate, Company, Contact, JobOrder, Placement
+  entityId    String?
+  title       String
+  dueAt       DateTime?
+  priority    String    @default("Medium") // Low, Medium, High, Urgent
+  status      String    @default("Open")   // Open, In Progress, Completed, Cancelled
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ─── Tags ────────────────────────────────────────────────────
+
+model Tag {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  name        String
+  color       String?
+  candidates  TagOnCandidate[]
+
+  @@unique([workspaceId, name])
+}
+
+model TagOnCandidate {
+  id          String    @id @default(cuid())
+  tagId       String
+  tag         Tag       @relation(fields: [tagId], references: [id])
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([tagId, candidateId])
+}

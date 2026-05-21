@@ -1,0 +1,25 @@
+app = "openhorn"
+primary_region = "iad"
+
+[build]
+  [build.args]
+    NEXT_TELEMETRY_DISABLED = "1"
+
+[env]
+  PORT = "3000"
+  NODE_ENV = "production"
+  DATABASE_URL = "file:/data/openhorn.db"
+  NEXTAUTH_URL = "https://openhorn.fly.dev"
+  NEXTAUTH_SECRET = "openhorn-secret-key-production-2026"
+  AUTH_SECRET = "openhorn-secret-key-production-2026"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[mounts]
+  source = "openhorn_data"
+  destination = "/data"
